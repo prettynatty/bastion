@@ -2,7 +2,7 @@ use crate::context::BastionId;
 use std::fmt;
 use std::result::Result;
 
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub(crate) struct BastionPath {
     // TODO: possibly more effective collection depending on how we'll use it in routing
     parent_chain: Vec<BastionId>,
@@ -24,11 +24,87 @@ impl BastionPath {
     }
 }
 
-#[derive(Debug, Clone)]
+impl fmt::Display for BastionPath {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(
+            f,
+            "/{}",
+            self.iter()
+                .map(|id| format!("{}", id))
+                .collect::<Vec<String>>()
+                .join("/")
+        )
+    }
+}
+
+impl fmt::Debug for BastionPath {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match &self.this {
+            Some(this @ BastionPathElement::Supervisor(_)) => write!(
+                f,
+                "/{}",
+                self.parent_chain
+                    .iter()
+                    .map(|id| BastionPathElement::Supervisor(id.clone()))
+                    .chain(vec![this.clone()])
+                    .map(|el| format!("{:?}", el))
+                    .collect::<Vec<String>>()
+                    .join("/")
+            ),
+            // TODO: combine with the pattern above when or-patterns become stable
+            Some(this @ BastionPathElement::Children(_)) => write!(
+                f,
+                "/{}",
+                self.parent_chain
+                    .iter()
+                    .map(|id| BastionPathElement::Supervisor(id.clone()))
+                    .chain(vec![this.clone()])
+                    .map(|el| format!("{:?}", el))
+                    .collect::<Vec<String>>()
+                    .join("/")
+            ),
+            Some(this @ BastionPathElement::Child(_)) => {
+                let parent_len = self.parent_chain.len();
+
+                write!(
+                    f,
+                    "/{}",
+                    self.parent_chain
+                        .iter()
+                        .enumerate()
+                        .map(|(i, id)| {
+                            if i == parent_len - 1 {
+                                BastionPathElement::Children(id.clone())
+                            } else {
+                                BastionPathElement::Supervisor(id.clone())
+                            }
+                        })
+                        .chain(vec![this.clone()])
+                        .map(|el| format!("{:?}", el))
+                        .collect::<Vec<String>>()
+                        .join("/")
+                )
+            }
+            None => write!(f, "/"),
+        }
+    }
+}
+
+#[derive(Clone)]
 pub(crate) enum BastionPathElement {
     Supervisor(BastionId),
     Children(BastionId),
     Child(BastionId),
+}
+
+impl fmt::Debug for BastionPathElement {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            BastionPathElement::Supervisor(id) => write!(f, "supervisor#{}", id),
+            BastionPathElement::Children(id) => write!(f, "children#{}", id),
+            BastionPathElement::Child(id) => write!(f, "child#{}", id),
+        }
+    }
 }
 
 impl BastionPathElement {
@@ -79,14 +155,14 @@ impl BastionPath {
                     };
                     path.parent_chain.push(id);
                     Ok(path)
-                },
+                }
                 this => Err(AppendError {
                     path: BastionPath {
                         parent_chain: self.parent_chain,
                         this,
                     },
                     element: children,
-                })
+                }),
             },
             child @ BastionPathElement::Child(_) => match self.this {
                 Some(BastionPathElement::Children(id)) => {
@@ -96,15 +172,15 @@ impl BastionPath {
                     };
                     path.parent_chain.push(id);
                     Ok(path)
-                },
+                }
                 this => Err(AppendError {
                     path: BastionPath {
                         parent_chain: self.parent_chain,
                         this,
                     },
                     element: child,
-                })
-            }
+                }),
+            },
         }
     }
 }
