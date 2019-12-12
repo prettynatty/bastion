@@ -70,6 +70,7 @@ mod broadcast;
 mod callbacks;
 mod config;
 mod system;
+mod path;
 
 pub mod children;
 pub mod context;
